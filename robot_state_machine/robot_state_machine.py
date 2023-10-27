@@ -55,14 +55,14 @@ class StateMachineActionServer(Node):
 
     ########## Dock/Undock #########################################################
 
-    def dock_undock_send_goal(self, order):
+    def dock_undock_send_goal(self, order_package):
         """
         Args:
             order : 'dock' or 'undock'
         """
-        self.get_logger().info('Executing Undocking...')
+        order = order_package[1]
         goal_msg = DockUndock.Goal()
-        goal_msg.secs = 2.2 # order is what is actually supposed to be used
+        goal_msg.secs = order_package[2]
 
         try:
             self._dock_undock_action_client.wait_for_server(timeout_sec=5)
@@ -71,22 +71,23 @@ class StateMachineActionServer(Node):
             return
 
         if(order == 'undock'):
+            self.get_logger().info('Executing Undocking...')
             self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
                                 feedback_callback=self.dock_undock_client_feedback_callback)
             self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
 
         if(order == 'dock'):
-            goal_msg.secs = 0.2
+            self.get_logger().info('Executing Docking...')
             self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
                                 feedback_callback=self.dock_undock_client_feedback_callback)
             self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
 
     ########## Navigation #########################################################
 
-    def navigation_send_goal(self, order):
+    def navigation_send_goal(self, waypoints_list):
         self.get_logger().info('Executing Navigation...')
         goal_msg = Navigate.Goal()
-        goal_msg.secs = 0.2
+        goal_msg.goals = waypoints_list
 
         try:
             self._navigate_action_client.wait_for_server(timeout_sec=5)
@@ -185,29 +186,32 @@ class StateMachineActionServer(Node):
         """
 
         # Define and fill the messages used
-        self._undock_package = (goal_handle.request.secs, 'undock', 0.2)
-        self._dock_package = (goal_handle.request.secs, 'dock', 0.2)
         feedback_msg = StateMachine.Feedback()
         self._state_machine_goal_handle = goal_handle
+
+        #! Presently hardcoded values for dock and undock times
+        undock_package = (goal_handle.request.start_dock_id, 'undock', -4.0)
+        dock_package = (goal_handle.request.end_dock_id, 'dock', 4.0)
 
         ######### Start with Undocking Phase ###########
         self.re_init_goal_states()
         self.action_done_event.clear()
-        self.dock_undock_send_goal('undock')
+        self.dock_undock_send_goal(undock_package)
         self.action_done_event.wait()
         self.get_logger().info('Got result')
 
         ######### Navigation Phase ###########
         self.re_init_goal_states()
         self.action_done_event.clear()
-        self.navigation_send_goal('undock')
+        waypoints_list = goal_handle.request.goals
+        self.navigation_send_goal(waypoints_list)
         self.action_done_event.wait()
         self.get_logger().info('Got result')
 
         ######### Docking Phase ###########
         self.re_init_goal_states()
         self.action_done_event.clear()
-        self.dock_undock_send_goal('dock')
+        self.dock_undock_send_goal(dock_package)
         self.action_done_event.wait()
         self.get_logger().info('Got result')
 
