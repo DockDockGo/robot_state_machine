@@ -10,8 +10,11 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from copy import deepcopy
 from rclpy.duration import Duration
 from nav2_simple_commander.robot_navigator import TaskResult
+from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 import math
 import time
+from threading import Event
 
 class StateMachineActionServer(Node):
 
@@ -21,12 +24,14 @@ class StateMachineActionServer(Node):
         self.get_logger().info("Starting State Machine Action Server")
 
 
+        self.callback_group = ReentrantCallbackGroup()
         # Construct the action server
         self._action_server = ActionServer(
             self,
             StateMachine,
             'StateMachine',
-            self.execute_callback)
+            self.execute_callback,
+            callback_group=self.callback_group)
 
         # Construct the action client (node and name should be same as defined in action server)
         self._dock_undock_action_client = ActionClient(self, DockUndock, 'DockUndock')
@@ -36,6 +41,7 @@ class StateMachineActionServer(Node):
         self._undock_package = None
         self._dock_package = None
         self._state_machine_success = False
+        self.action_done_event = Event()
 
     def re_init_goal_states(self):
         self._goal_accepted = None
@@ -88,6 +94,7 @@ class StateMachineActionServer(Node):
     ########### Undock Functions ##########################################################
 
     def undock_client_goal_response_callback(self, future):
+        self.get_logger().info("Inside Goal Response callback")
         goal_handle = future.result()
         if not goal_handle.accepted:
             self.get_logger().info('Goal rejected :(')
@@ -117,9 +124,12 @@ class StateMachineActionServer(Node):
             return self.get_final_result(False)
 
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
+        self._state_machine_success = True
         if(self._goal_reached is True):
             # FINAL SUCCESS OUTPUT
+            self.get_logger().info(f"Goal Reached")
             self._state_machine_success = True
+            self.action_done_event.set()
             return
         else:
             return self.get_final_result(False)
@@ -244,8 +254,10 @@ class StateMachineActionServer(Node):
 
         ######### Start State Changes with Undocking ###########
         self.re_init_goal_states()
+        self.action_done_event.clear()
         self.dock_undock_send_goal('undock')
-        # self.navigation_send_goal(0.2)
+        self.action_done_event.wait()
+        self.get_logger().info('Got result')
 
         ######### Navigation Phase ###########
         # called immediately after Undocking Phase
@@ -253,33 +265,21 @@ class StateMachineActionServer(Node):
         ######### Docking Phase ###########
         # called immediately after Navigation Phase
 
-        self.get_logger().info(f"Returning Success")
-        goal_handle.succeed()
-        return self.get_final_result(True)
-
-
-        #! BELOW WAIT NOT WORKING
-        # while(self._state_machine_success is False):
-        #     self.get_logger().info(f"Executing State Machine")
-        #     time.sleep(1)
-
-        # if self._state_machine_success:
-        #     self.get_logger().info(f"Returning Success")
-        #     goal_handle.succeed()
-
-        #     return self.get_final_result(True)
-
-        # else:
-        #     return self.get_final_result(False)
+        if self._state_machine_success:
+            self.get_logger().info("Returning Success")
+            goal_handle.succeed()
+            return self.get_final_result(True)
+        else:
+            return self.get_final_result(False)
 
 
 def StateMachineServer(args=None):
     rclpy.init(args=args)
     print("ARGS IS", args)
-
+    executor = MultiThreadedExecutor()
     # start the MotionActionServer
     state_machine_action_server = StateMachineActionServer()
-    rclpy.spin(state_machine_action_server)
+    rclpy.spin(state_machine_action_server, executor)
 
 
 if __name__ == '__main__':
