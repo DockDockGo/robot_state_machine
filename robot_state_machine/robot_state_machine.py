@@ -64,81 +64,75 @@ class StateMachineActionServer(Node):
         goal_msg = DockUndock.Goal()
         goal_msg.secs = 2.2 # order is what is actually supposed to be used
 
-        self._dock_undock_action_client.wait_for_server()
+        try:
+            self._dock_undock_action_client.wait_for_server(timeout_sec=5)
+        except:
+            self.get_logger().error('Timeout: Action server not available, waited for 5 seconds')
+            return
 
         if(order == 'undock'):
-            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg, feedback_callback=self.undock_client_feedback_callback)
-            self._send_goal_future.add_done_callback(self.undock_client_goal_response_callback)
+            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
+                                feedback_callback=self.dock_undock_client_feedback_callback)
+            self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
 
         if(order == 'dock'):
             goal_msg.secs = 0.2
-            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg, feedback_callback=self.dock_client_feedback_callback)
-            self._send_goal_future.add_done_callback(self.dock_client_goal_response_callback)
+            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
+                                feedback_callback=self.dock_undock_client_feedback_callback)
+            self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
 
     ########## Navigation #########################################################
 
     def navigation_send_goal(self, order):
-        self.get_logger().info(f"Here 2")
         self.get_logger().info('Executing Navigation...')
         goal_msg = Navigate.Goal()
         goal_msg.secs = 0.2
 
-        self._navigate_action_client.wait_for_server()
+        try:
+            self._navigate_action_client.wait_for_server(timeout_sec=5)
+        except:
+            self.get_logger().error('Timeout: Action server not available, waited for 5 seconds')
+            return
 
-        self.get_logger().info(f"Here 3")
-        self._send_goal_future = self._navigate_action_client.send_goal_async(goal_msg, feedback_callback=self.nav_client_feedback_callback)
+        self._send_goal_future = self._navigate_action_client.send_goal_async(goal_msg,
+                                        feedback_callback=self.nav_client_feedback_callback)
+        self._send_goal_future.add_done_callback(self.nav_client_goal_response_callback)
 
-        self.get_logger().info(f"Here 4")
-        self._send_goal_future.add_done_callback(self.nav_client_get_result_callback)
+    ########### Dock/Undock Functions ##########################################################
 
-    ########### Undock Functions ##########################################################
-
-    def undock_client_goal_response_callback(self, future):
-        self.get_logger().info("Inside Goal Response callback")
+    def dock_undock_client_goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
+            self.get_logger().warning('Goal rejected :(')
             return
 
         self.get_logger().info('Goal accepted :)')
         self._goal_accepted = True
 
-        self.get_logger().info(f"Here 6")
         self._get_result_future = goal_handle.get_result_async()
-        self.get_logger().info(f"Here 7")
-        self._get_result_future.add_done_callback(self.undock_client_get_result_callback)
+        self._get_result_future.add_done_callback(self.dock_undock_client_get_result_callback)
 
-    def undock_client_get_result_callback(self, future):
+    def dock_undock_client_get_result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f"Here 8")
         result_string = str(result.success)
         self.get_logger().info(f'Result: {result_string}')
-        self.get_logger().info(f"Here 9")
         if(result_string == "True"):
             self._goal_reached = True
         else:
             self._goal_reached = False
-        self.get_logger().info(f"Here 10")
-
-        if(self._goal_accepted is False):
-            return self.get_final_result(False)
 
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
-        self._state_machine_success = True
         if(self._goal_reached is True):
-            # FINAL SUCCESS OUTPUT
             self.get_logger().info(f"Goal Reached")
             self._state_machine_success = True
             self.action_done_event.set()
-            return
         else:
-            return self.get_final_result(False)
+            self._state_machine_success = False
+            self.get_logger().error(f"Goal Not Reached!")
 
+        return
 
-        # self.re_init_goal_states()
-        # self.navigation_send_goal(0.2)
-
-    def undock_client_feedback_callback(self, feedback_msg):
+    def dock_undock_client_feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
         feedback_str = str(feedback.pose_feedback)
         self.get_logger().info(f'Received feedback: {feedback_str}')
@@ -149,40 +143,32 @@ class StateMachineActionServer(Node):
     def nav_client_goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
+            self.get_logger().warning('Goal rejected :(')
             return
 
         self.get_logger().info('Goal accepted :)')
         self._goal_accepted = True
 
-        self.get_logger().info(f"Here 6")
         self._get_result_future = goal_handle.get_result_async()
-        self.get_logger().info(f"Here 7")
         self._get_result_future.add_done_callback(self.nav_client_get_result_callback)
 
     def nav_client_get_result_callback(self, future):
         result = future.result().result
-        self.get_logger().info(f"Here 8")
         result_string = str(result.success)
         self.get_logger().info(f'Result: {result_string}')
-        self.get_logger().info(f"Here 9")
         if(result_string == "True"):
             self._goal_reached = True
         else:
             self._goal_reached = False
-        self.get_logger().info(f"Here 10")
-
-        if(self._goal_accepted is False):
-            return self.get_final_result(False)
 
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         if(self._goal_reached is True):
-            pass
+            self.get_logger().info(f"Goal Reached")
+            self._state_machine_success = True
+            self.action_done_event.set()
         else:
-            return self.get_final_result(False)
-
-        # self.re_init_goal_states()
-        # self.dock_undock_send_goal('dock')
+            self._state_machine_success = False
+            self.get_logger().error(f"Goal Not Reached!")
 
         return
 
@@ -190,54 +176,6 @@ class StateMachineActionServer(Node):
         feedback = feedback_msg.feedback
         feedback_str = str(feedback.pose_feedback)
         self.get_logger().info(f'Received feedback: {feedback_str}')
-
-
-    ########### Dock Functions ##########################################################
-
-    def dock_client_goal_response_callback(self, future):
-        goal_handle = future.result()
-        if not goal_handle.accepted:
-            self.get_logger().info('Goal rejected :(')
-            return
-
-        self.get_logger().info('Goal accepted :)')
-        self._goal_accepted = True
-
-        self.get_logger().info(f"Here 6")
-        self._get_result_future = goal_handle.get_result_async()
-        self.get_logger().info(f"Here 7")
-        self._get_result_future.add_done_callback(self.dock_client_get_result_callback)
-
-    def dock_client_get_result_callback(self, future):
-        result = future.result().result
-        self.get_logger().info(f"Here 8")
-        result_string = str(result.success)
-        self.get_logger().info(f'Result: {result_string}')
-        self.get_logger().info(f"Here 9")
-        if(result_string == "True"):
-            self._goal_reached = True
-        else:
-            self._goal_reached = False
-        self.get_logger().info(f"Here 10")
-
-        if(self._goal_accepted is False):
-            return self.get_final_result(False)
-
-        self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
-        if(self._goal_reached is True):
-            pass
-        else:
-            return self.get_final_result(False)
-
-        self.get_logger().info("Completed All Tasks")
-
-        return
-
-    def dock_client_feedback_callback(self, feedback_msg):
-        feedback = feedback_msg.feedback
-        feedback_str = str(feedback.pose_feedback)
-        self.get_logger().info(f'Received feedback: {feedback_str}')
-
 
 
     ############### MAIN LOOP START ################################################
@@ -252,7 +190,7 @@ class StateMachineActionServer(Node):
         feedback_msg = StateMachine.Feedback()
         self._state_machine_goal_handle = goal_handle
 
-        ######### Start State Changes with Undocking ###########
+        ######### Start with Undocking Phase ###########
         self.re_init_goal_states()
         self.action_done_event.clear()
         self.dock_undock_send_goal('undock')
@@ -260,12 +198,20 @@ class StateMachineActionServer(Node):
         self.get_logger().info('Got result')
 
         ######### Navigation Phase ###########
-        # called immediately after Undocking Phase
+        self.re_init_goal_states()
+        self.action_done_event.clear()
+        self.navigation_send_goal('undock')
+        self.action_done_event.wait()
+        self.get_logger().info('Got result')
 
         ######### Docking Phase ###########
-        # called immediately after Navigation Phase
+        self.re_init_goal_states()
+        self.action_done_event.clear()
+        self.dock_undock_send_goal('dock')
+        self.action_done_event.wait()
+        self.get_logger().info('Got result')
 
-        if self._state_machine_success:
+        if self._state_machine_success and self._goal_accepted and self._goal_reached:
             self.get_logger().info("Returning Success")
             goal_handle.succeed()
             return self.get_final_result(True)
