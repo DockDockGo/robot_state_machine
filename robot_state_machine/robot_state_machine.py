@@ -41,6 +41,7 @@ class StateMachineActionServer(Node):
         self._undock_package = None
         self._dock_package = None
         self._state_machine_success = False
+        self._state = None
         self.action_done_event = Event()
 
     def re_init_goal_states(self):
@@ -173,10 +174,20 @@ class StateMachineActionServer(Node):
 
         return
 
-    def nav_client_feedback_callback(self, feedback_msg):
-        feedback = feedback_msg.feedback
-        feedback_str = str(feedback.pose_feedback)
-        self.get_logger().info(f'Received feedback: {feedback_str}')
+    def nav_client_feedback_callback(self, input_feedback_msg):
+        # get feedback from low level action server
+        input_feedback = input_feedback_msg.feedback.pose_feedback
+        input_feedback_pose_x = str(round(input_feedback.pose.pose.position.x, 2))
+        input_feedback_pose_y = str(round(input_feedback.pose.pose.position.y, 2))
+        self.get_logger().info(f'Received feedback: robot pos x={input_feedback_pose_x},\
+                                 robot pos y = {input_feedback_pose_y}')
+
+        # publish feedback to high level action servers
+        output_feedback_msg = StateMachine.Feedback()
+        output_feedback_msg.pose_feedback = input_feedback
+        output_feedback_msg.state_feedback = self._state
+        self._state_machine_goal_handle.publish_feedback(output_feedback_msg)
+
 
 
     ############### MAIN LOOP START ################################################
@@ -186,7 +197,6 @@ class StateMachineActionServer(Node):
         """
 
         # Define and fill the messages used
-        feedback_msg = StateMachine.Feedback()
         self._state_machine_goal_handle = goal_handle
 
         #! Presently hardcoded values for dock and undock times
@@ -195,6 +205,7 @@ class StateMachineActionServer(Node):
 
         ######### Start with Undocking Phase ###########
         self.re_init_goal_states()
+        self._state = "Undocking"
         self.action_done_event.clear()
         self.dock_undock_send_goal(undock_package)
         self.action_done_event.wait()
@@ -202,6 +213,7 @@ class StateMachineActionServer(Node):
 
         ######### Navigation Phase ###########
         self.re_init_goal_states()
+        self._state = "Navigating"
         self.action_done_event.clear()
         waypoints_list = goal_handle.request.goals
         self.navigation_send_goal(waypoints_list)
@@ -210,6 +222,7 @@ class StateMachineActionServer(Node):
 
         ######### Docking Phase ###########
         self.re_init_goal_states()
+        self._state = "Docking"
         self.action_done_event.clear()
         self.dock_undock_send_goal(dock_package)
         self.action_done_event.wait()
