@@ -19,23 +19,32 @@ from threading import Event
 class StateMachineActionServer(Node):
 
     def __init__(self):
-        #! TODO: Add namespace
         super().__init__('state_machine_action_server')
         self.get_logger().info("Starting State Machine Action Server")
 
+        self.declare_parameter('namespace_param', '/robot1')
+        robot_namespace = self.get_parameter('namespace_param').get_parameter_value().string_value
+        self.get_logger().info(f"namespace is {robot_namespace}")
+
+        action_server_name = robot_namespace + "/StateMachine"
+        self.get_logger().info(f"State Machine Action Server Name is {action_server_name}")
+        dockundock_client_name = robot_namespace + "/DockUndock"
+        navigate_client_name = robot_namespace + "/Navigate"
+        self.get_logger().info(f"DockUndock Server being used for client is {dockundock_client_name}")
+        self.get_logger().info(f"Navigate Server being used for client is {navigate_client_name}")
 
         self.callback_group = ReentrantCallbackGroup()
         # Construct the action server
         self._action_server = ActionServer(
             self,
             StateMachine,
-            'StateMachine',
+            action_server_name,
             self.execute_callback,
             callback_group=self.callback_group)
 
         # Construct the action client (node and name should be same as defined in action server)
-        self._dock_undock_action_client = ActionClient(self, DockUndock, 'DockUndock')
-        self._navigate_action_client = ActionClient(self, Navigate, 'Navigate')
+        self._dock_undock_action_client = ActionClient(self, DockUndock, dockundock_client_name)
+        self._navigate_action_client = ActionClient(self, Navigate, navigate_client_name)
 
         self.re_init_goal_states()
         self._undock_package = None
@@ -126,12 +135,10 @@ class StateMachineActionServer(Node):
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         if(self._goal_reached is True):
             self.get_logger().info(f"Goal Reached")
-            self._state_machine_success = True
             self.action_done_event.set()
         else:
-            self._state_machine_success = False
             self.get_logger().error(f"Goal Not Reached!")
-
+            self.action_done_event.set()
         return
 
     def dock_undock_client_feedback_callback(self, feedback_msg):
@@ -166,12 +173,10 @@ class StateMachineActionServer(Node):
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         if(self._goal_reached is True):
             self.get_logger().info(f"Goal Reached")
-            self._state_machine_success = True
             self.action_done_event.set()
         else:
-            self._state_machine_success = False
             self.get_logger().error(f"Goal Not Reached!")
-
+            self.action_done_event.set()
         return
 
     def nav_client_feedback_callback(self, input_feedback_msg):
@@ -210,6 +215,9 @@ class StateMachineActionServer(Node):
         self.dock_undock_send_goal(undock_package)
         self.action_done_event.wait()
         self.get_logger().info('Got result')
+        if (self._goal_accepted is False) or (self._goal_reached is False):
+            goal_handle.abort()
+            return self.get_final_result(False)
 
         ######### Navigation Phase ###########
         self.re_init_goal_states()
@@ -219,6 +227,9 @@ class StateMachineActionServer(Node):
         self.navigation_send_goal(waypoints_list)
         self.action_done_event.wait()
         self.get_logger().info('Got result')
+        if (self._goal_accepted is False) or (self._goal_reached is False):
+            goal_handle.abort()
+            return self.get_final_result(False)
 
         ######### Docking Phase ###########
         self.re_init_goal_states()
@@ -228,11 +239,12 @@ class StateMachineActionServer(Node):
         self.action_done_event.wait()
         self.get_logger().info('Got result')
 
-        if self._state_machine_success and self._goal_accepted and self._goal_reached:
+        if self._goal_accepted and self._goal_reached:
             self.get_logger().info("Returning Success")
             goal_handle.succeed()
             return self.get_final_result(True)
         else:
+            goal_handle.abort()
             return self.get_final_result(False)
 
 
