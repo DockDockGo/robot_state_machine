@@ -22,7 +22,7 @@ class StateMachineActionServer(Node):
         super().__init__('state_machine_action_server')
         self.get_logger().info("Starting State Machine Action Server")
 
-        self.declare_parameter('namespace_param', '/robot1')
+        self.declare_parameter('namespace_param', 'robot1')
         robot_namespace = self.get_parameter('namespace_param').get_parameter_value().string_value
         self.get_logger().info(f"namespace is {robot_namespace}")
 
@@ -129,16 +129,14 @@ class StateMachineActionServer(Node):
         self.get_logger().info(f'Result: {result_string}')
         if(result_string == "True"):
             self._goal_reached = True
-        else:
-            self._goal_reached = False
-
-        self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
-        if(self._goal_reached is True):
             self.get_logger().info(f"Goal Reached")
             self.action_done_event.set()
         else:
+            self._goal_reached = False
             self.get_logger().error(f"Goal Not Reached!")
             self.action_done_event.set()
+
+        self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         return
 
     def dock_undock_client_feedback_callback(self, feedback_msg):
@@ -167,16 +165,14 @@ class StateMachineActionServer(Node):
         self.get_logger().info(f'Result: {result_string}')
         if(result_string == "True"):
             self._goal_reached = True
-        else:
-            self._goal_reached = False
-
-        self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
-        if(self._goal_reached is True):
             self.get_logger().info(f"Goal Reached")
             self.action_done_event.set()
         else:
+            self._goal_reached = False
             self.get_logger().error(f"Goal Not Reached!")
             self.action_done_event.set()
+
+        self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         return
 
     def nav_client_feedback_callback(self, input_feedback_msg):
