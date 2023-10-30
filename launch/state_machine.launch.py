@@ -3,7 +3,7 @@ from launch import LaunchDescription
 from launch.substitutions import LaunchConfiguration
 
 def generate_launch_description():
-    
+
     ld = LaunchDescription()
 
     #### Define the params ####
