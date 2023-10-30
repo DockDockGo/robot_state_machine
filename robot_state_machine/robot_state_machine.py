@@ -22,14 +22,21 @@ class StateMachineActionServer(Node):
         super().__init__('state_machine_action_server')
         self.get_logger().info("Starting State Machine Action Server")
 
-        self.declare_parameter('namespace_param', 'robot1')
+        self.declare_parameter('namespace_param', '')
         robot_namespace = self.get_parameter('namespace_param').get_parameter_value().string_value
         self.get_logger().info(f"namespace is {robot_namespace}")
 
-        action_server_name = robot_namespace + "/StateMachine"
+        if robot_namespace != '':
+            action_server_name = robot_namespace + "/" +  "StateMachine"
+            dockundock_client_name = robot_namespace + "/DockUndock"
+            navigate_client_name = robot_namespace + "/Navigate"
+
+        else:
+            action_server_name = "StateMachine"
+            dockundock_client_name = "DockUndock"
+            navigate_client_name = "Navigate"
+
         self.get_logger().info(f"State Machine Action Server Name is {action_server_name}")
-        dockundock_client_name = robot_namespace + "/DockUndock"
-        navigate_client_name = robot_namespace + "/Navigate"
         self.get_logger().info(f"DockUndock Server being used for client is {dockundock_client_name}")
         self.get_logger().info(f"Navigate Server being used for client is {navigate_client_name}")
 
