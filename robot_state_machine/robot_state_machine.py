@@ -242,13 +242,13 @@ class StateMachineActionServer(Node):
         self.action_done_event.wait()
         self.get_logger().info('Got result')
 
-        if self._goal_accepted and self._goal_reached:
-            self.get_logger().info("Returning Success")
-            goal_handle.succeed()
-            return self.get_final_result(True)
-        else:
+        if (self._goal_accepted is False) or (self._goal_reached is False):
             goal_handle.abort()
             return self.get_final_result(False)
+
+        self.get_logger().info("Returning State Machine Success")
+        goal_handle.succeed()
+        return self.get_final_result(True)
 
 
 def StateMachineServer(args=None):
