@@ -210,8 +210,8 @@ class StateMachineActionServer(Node):
         self._state_machine_goal_handle = goal_handle
 
         #! Presently hardcoded values for dock and undock times
-        undock_package = (goal_handle.request.start_dock_id, 'undock', (-1*self.dock_undock_duration))
-        dock_package = (goal_handle.request.end_dock_id, 'dock', self.dock_undock_duration)
+        undock_package = (goal_handle.request.start_dock_id, 'undock', self.dock_undock_duration)
+        dock_package = (goal_handle.request.end_dock_id, 'dock', (-1*self.dock_undock_duration))
         output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
