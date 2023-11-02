@@ -59,6 +59,7 @@ class StateMachineActionServer(Node):
         self._state_machine_success = False
         self._state = None
         self.action_done_event = Event()
+        self.feedback_from_motion_server = None
 
     def re_init_goal_states(self):
         self._goal_accepted = None
@@ -189,13 +190,13 @@ class StateMachineActionServer(Node):
         input_feedback_pose_y = str(round(input_feedback.pose.pose.position.y, 2))
         self.get_logger().info(f'Received feedback: robot pos x={input_feedback_pose_x},\
                                  robot pos y = {input_feedback_pose_y}')
+        self.feedback_from_motion_server = input_feedback
 
         # publish feedback to high level action servers
         output_feedback_msg = StateMachine.Feedback()
-        output_feedback_msg.pose_feedback = input_feedback
+        output_feedback_msg.pose_feedback = self.feedback_from_motion_server
         output_feedback_msg.state_feedback = self._state
         self._state_machine_goal_handle.publish_feedback(output_feedback_msg)
-
 
 
     ############### MAIN LOOP START ################################################
@@ -210,6 +211,7 @@ class StateMachineActionServer(Node):
         #! Presently hardcoded values for dock and undock times
         undock_package = (goal_handle.request.start_dock_id, 'undock', -4.0)
         dock_package = (goal_handle.request.end_dock_id, 'dock', 4.0)
+        output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
         self.re_init_goal_states()
@@ -221,6 +223,10 @@ class StateMachineActionServer(Node):
         if (self._goal_accepted is False) or (self._goal_reached is False):
             goal_handle.abort()
             return self.get_final_result(False)
+        self.get_logger().info('State Change')
+        output_feedback_msg.pose_feedback = PoseWithCovarianceStamped()
+        output_feedback_msg.state_feedback = self._state
+        goal_handle.publish_feedback(output_feedback_msg)
 
         ######### Navigation Phase ###########
         self.re_init_goal_states()
@@ -233,6 +239,10 @@ class StateMachineActionServer(Node):
         if (self._goal_accepted is False) or (self._goal_reached is False):
             goal_handle.abort()
             return self.get_final_result(False)
+        self.get_logger().info('State Change')
+        output_feedback_msg.pose_feedback = self.feedback_from_motion_server
+        output_feedback_msg.state_feedback = self._state
+        goal_handle.publish_feedback(output_feedback_msg)
 
         ######### Docking Phase ###########
         self.re_init_goal_states()
