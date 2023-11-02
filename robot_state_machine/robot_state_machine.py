@@ -27,9 +27,9 @@ class StateMachineActionServer(Node):
         self.get_logger().info(f"namespace is {robot_namespace}")
 
         if robot_namespace != '':
-            action_server_name = robot_namespace + "/" +  "StateMachine"
-            dockundock_client_name = robot_namespace + "/DockUndock"
-            navigate_client_name = robot_namespace + "/Navigate"
+            action_server_name = "/" + robot_namespace + "/StateMachine"
+            dockundock_client_name = "/" + robot_namespace + "/DockUndock"
+            navigate_client_name = "/" + robot_namespace + "/Navigate"
 
         else:
             action_server_name = "StateMachine"
