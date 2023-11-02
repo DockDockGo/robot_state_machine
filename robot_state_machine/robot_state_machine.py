@@ -240,7 +240,7 @@ class StateMachineActionServer(Node):
             goal_handle.abort()
             return self.get_final_result(False)
         self.get_logger().info('State Change')
-        output_feedback_msg.pose_feedback = self.feedback_from_motion_server
+        output_feedback_msg.pose_feedback = PoseWithCovarianceStamped()
         output_feedback_msg.state_feedback = self._state
         goal_handle.publish_feedback(output_feedback_msg)
 
