@@ -60,6 +60,7 @@ class StateMachineActionServer(Node):
         self._state = None
         self.action_done_event = Event()
         self.feedback_from_motion_server = None
+        self.dock_undock_duration = 2.0 #! Change to read this from a config file later
 
     def re_init_goal_states(self):
         self._goal_accepted = None
@@ -209,8 +210,8 @@ class StateMachineActionServer(Node):
         self._state_machine_goal_handle = goal_handle
 
         #! Presently hardcoded values for dock and undock times
-        undock_package = (goal_handle.request.start_dock_id, 'undock', -4.0)
-        dock_package = (goal_handle.request.end_dock_id, 'dock', 4.0)
+        undock_package = (goal_handle.request.start_dock_id, 'undock', (-1*self.dock_undock_duration))
+        dock_package = (goal_handle.request.end_dock_id, 'dock', self.dock_undock_duration)
         output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
