@@ -151,7 +151,7 @@ class StateMachineActionServer(Node):
     def dock_undock_client_feedback_callback(self, feedback_msg):
         feedback = feedback_msg.feedback
         feedback_str = str(feedback.pose_feedback)
-        self.get_logger().info(f'Received feedback: {feedback_str}')
+        # self.get_logger().info(f'Received feedback: {feedback_str}')
 
 
     ########### Navigation Functions ##########################################################
@@ -189,8 +189,8 @@ class StateMachineActionServer(Node):
         input_feedback = input_feedback_msg.feedback.pose_feedback
         input_feedback_pose_x = str(round(input_feedback.pose.pose.position.x, 2))
         input_feedback_pose_y = str(round(input_feedback.pose.pose.position.y, 2))
-        self.get_logger().info(f'Received feedback: robot pos x={input_feedback_pose_x},\
-                                 robot pos y = {input_feedback_pose_y}')
+        # self.get_logger().info(f'Received feedback: robot pos x={input_feedback_pose_x},\
+        #                          robot pos y = {input_feedback_pose_y}')
         self.feedback_from_motion_server = input_feedback
 
         # publish feedback to high level action servers
