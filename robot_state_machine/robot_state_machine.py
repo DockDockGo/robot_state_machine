@@ -79,9 +79,13 @@ class StateMachineActionServer(Node):
         Args:
             order : 'dock' or 'undock'
         """
+        # start_dock_id = order_package[0]
         order = order_package[1]
+
         goal_msg = DockUndock.Goal()
         goal_msg.secs = order_package[2]
+        goal_msg.dock_lateral_bias = order_package[3]
+        goal_msg.dock_forward_bias = order_package[4]
 
         try:
             self._dock_undock_action_client.wait_for_server(timeout_sec=5)
@@ -210,8 +214,14 @@ class StateMachineActionServer(Node):
         self._state_machine_goal_handle = goal_handle
 
         #! Presently hardcoded values for dock and undock times
-        undock_package = (goal_handle.request.start_dock_id, 'undock', float(goal_handle.request.start_dock_id))
-        dock_package = (goal_handle.request.end_dock_id, 'dock', (-1 * float(goal_handle.request.end_dock_id)))
+        undock_package = (goal_handle.request.start_dock_id,
+                            'undock', float(goal_handle.request.start_dock_id),
+                            goal_handle.request.dock_lateral_bias,
+                            goal_handle.request.dock_forward_bias)
+        dock_package = (goal_handle.request.end_dock_id,
+                            'dock', (-1 * float(goal_handle.request.end_dock_id)),
+                            goal_handle.request.dock_lateral_bias,
+                            goal_handle.request.dock_forward_bias)
         output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
