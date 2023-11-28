@@ -81,6 +81,7 @@ class StateMachineActionServer(Node):
         """
         # start_dock_id = order_package[0]
         order = order_package[1]
+        undock_flag = order_package[5]
 
         goal_msg = DockUndock.Goal()
         goal_msg.secs = order_package[2]
@@ -94,10 +95,14 @@ class StateMachineActionServer(Node):
             return
 
         if(order == 'undock'):
-            self.get_logger().info('Executing Undocking...')
-            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
-                                feedback_callback=self.dock_undock_client_feedback_callback)
-            self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
+            if undock_flag:
+                self.get_logger().info('Executing Undocking...')
+                self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
+                                    feedback_callback=self.dock_undock_client_feedback_callback)
+                self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
+            else:
+                self._goal_accepted = True
+                self.action_done_event.set()
 
         if(order == 'dock'):
             self.get_logger().info('Executing Docking...')
@@ -217,11 +222,13 @@ class StateMachineActionServer(Node):
         undock_package = (goal_handle.request.start_dock_id,
                             'undock', float(goal_handle.request.start_dock_id),
                             goal_handle.request.dock_lateral_bias,
-                            goal_handle.request.dock_forward_bias)
+                            goal_handle.request.dock_forward_bias,
+                            goal_handle.request.undock_flag)
         dock_package = (goal_handle.request.end_dock_id,
                             'dock', (-1 * float(goal_handle.request.end_dock_id)),
                             goal_handle.request.dock_lateral_bias,
-                            goal_handle.request.dock_forward_bias)
+                            goal_handle.request.dock_forward_bias,
+                            goal_handle.request.undock_flag)
         output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
