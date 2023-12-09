@@ -10,11 +10,11 @@ from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from copy import deepcopy
 from rclpy.duration import Duration
 from nav2_simple_commander.robot_navigator import TaskResult
-from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.callback_groups import ReentrantCallbackGroup, MutuallyExclusiveCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 import math
 import time
-from threading import Event
+from threading import Event, Lock
 
 class StateMachineActionServer(Node):
 
@@ -46,7 +46,8 @@ class StateMachineActionServer(Node):
             self,
             StateMachine,
             action_server_name,
-            self.execute_callback,
+            execute_callback=self.execute_callback,
+            handle_accepted_callback=self.handle_accepted_callback,
             callback_group=self.callback_group)
 
         # Construct the action client (node and name should be same as defined in action server)
@@ -58,9 +59,16 @@ class StateMachineActionServer(Node):
         self._dock_package = None
         self._state_machine_success = False
         self._state = None
-        self.action_done_event = Event()
+        self._action_done_event = Event()
         self.feedback_from_motion_server = None
         self.dock_undock_duration = 2.0 #! Change to read this from a config file later
+
+        # features handling goal aborting
+        self._goal_lock = Lock()
+        self._state_machine_goal_handle = None
+
+        # Create a simple timer to check for goal handle changes
+        self.timer = self.create_timer(0.1, callback_group=self.callback_group, callback=self.simple_timer_callback)
 
     def re_init_goal_states(self):
         self._goal_accepted = None
@@ -71,6 +79,28 @@ class StateMachineActionServer(Node):
         result.success = success_status
         return result
 
+    ########## Functions to check goal handle status ##################################
+    def handle_accepted_callback(self, goal_handle):
+        with self._goal_lock:
+            # This server only allows one goal at a time
+            if self._state_machine_goal_handle is not None and self._state_machine_goal_handle.is_active:
+                self.get_logger().info('Aborting previous goal')
+                # Abort the existing goal
+                self._state_machine_goal_handle.abort()
+            self._state_machine_goal_handle = goal_handle
+
+        goal_handle.execute()
+
+    def simple_timer_callback(self):
+        if not self._state_machine_goal_handle.is_active:
+            self.get_logger().info('Goal aborted')
+            self.get_final_result(False)
+
+        # check for aborted or cancelled goal handle
+        if self._state_machine_goal_handle.is_cancel_requested:
+            self._state_machine_goal_handle.canceled()
+            self.get_logger().info('Goal canceled')
+            self.get_final_result(True)
 
     ########## Dock/Undock #########################################################
 
@@ -143,11 +173,11 @@ class StateMachineActionServer(Node):
         if(result_string == "True"):
             self._goal_reached = True
             self.get_logger().info(f"Goal Reached")
-            self.action_done_event.set()
+            self._action_done_event.set()
         else:
             self._goal_reached = False
             self.get_logger().error(f"Goal Not Reached!")
-            self.action_done_event.set()
+            self._action_done_event.set()
 
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         return
@@ -179,11 +209,11 @@ class StateMachineActionServer(Node):
         if(result_string == "True"):
             self._goal_reached = True
             self.get_logger().info(f"Goal Reached")
-            self.action_done_event.set()
+            self._action_done_event.set()
         else:
             self._goal_reached = False
             self.get_logger().error(f"Goal Not Reached!")
-            self.action_done_event.set()
+            self._action_done_event.set()
 
         self.get_logger().info(f"Goal reached status is {str(self._goal_reached)}")
         return
@@ -227,9 +257,9 @@ class StateMachineActionServer(Node):
         ######### Start with Undocking Phase ###########
         self.re_init_goal_states()
         self._state = "Undocking"
-        self.action_done_event.clear()
+        self._action_done_event.clear()
         self.dock_undock_send_goal(undock_package)
-        self.action_done_event.wait()
+        self._action_done_event.wait()
         self.get_logger().info('Got result')
         if (self._goal_accepted is False) or (self._goal_reached is False):
             goal_handle.abort()
@@ -242,10 +272,10 @@ class StateMachineActionServer(Node):
         ######### Navigation Phase ###########
         self.re_init_goal_states()
         self._state = "Navigating"
-        self.action_done_event.clear()
+        self._action_done_event.clear()
         waypoints_list = goal_handle.request.goals
         self.navigation_send_goal(waypoints_list)
-        self.action_done_event.wait()
+        self._action_done_event.wait()
         self.get_logger().info('Got result')
         if (self._goal_accepted is False) or (self._goal_reached is False):
             goal_handle.abort()
@@ -258,9 +288,9 @@ class StateMachineActionServer(Node):
         ######### Docking Phase ###########
         self.re_init_goal_states()
         self._state = "Docking"
-        self.action_done_event.clear()
+        self._action_done_event.clear()
         self.dock_undock_send_goal(dock_package)
-        self.action_done_event.wait()
+        self._action_done_event.wait()
         self.get_logger().info('Got result')
 
         if (self._goal_accepted is False) or (self._goal_reached is False):
@@ -279,7 +309,8 @@ def StateMachineServer(args=None):
     # start the MotionActionServer
     state_machine_action_server = StateMachineActionServer()
     rclpy.spin(state_machine_action_server, executor)
-
+    # StateMachineActionServer.destroy_node()
+    # rclpy.shutdown()
 
 if __name__ == '__main__':
     StateMachineServer()
