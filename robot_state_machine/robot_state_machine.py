@@ -92,19 +92,6 @@ class StateMachineActionServer(Node):
 
         goal_handle.execute()
 
-    # def simple_timer_callback(self):
-    #     if self._state_machine_goal_handle is not None:
-    #         if not self._state_machine_goal_handle.is_active:
-    #             # self.get_logger().info('Goal aborted')
-    #             self.get_final_result(False)
-
-    #     # check for aborted or cancelled goal handle
-    #     if self._state_machine_goal_handle is not None:
-    #         if self._state_machine_goal_handle.is_cancel_requested:
-    #             self._state_machine_goal_handle.canceled()
-    #             # self.get_logger().info('Goal canceled')
-    #             self.get_final_result(True)
-
     ########## Dock/Undock #########################################################
 
     def dock_undock_send_goal(self, order_package):
@@ -114,6 +101,7 @@ class StateMachineActionServer(Node):
         """
         # start_dock_id = order_package[0]
         order = order_package[1]
+        undock_flag = order_package[5]
 
         goal_msg = DockUndock.Goal()
         goal_msg.secs = order_package[2]
@@ -127,10 +115,14 @@ class StateMachineActionServer(Node):
             return
 
         if(order == 'undock'):
-            self.get_logger().info('Executing Undocking...')
-            self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
-                                feedback_callback=self.dock_undock_client_feedback_callback)
-            self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
+            if undock_flag:
+                self.get_logger().info('Executing Undocking...')
+                self._send_goal_future = self._dock_undock_action_client.send_goal_async(goal_msg,
+                                    feedback_callback=self.dock_undock_client_feedback_callback)
+                self._send_goal_future.add_done_callback(self.dock_undock_client_goal_response_callback)
+            else:
+                self._goal_accepted = True
+                self._action_done_event.set()
 
         if(order == 'dock'):
             self.get_logger().info('Executing Docking...')
@@ -263,39 +255,42 @@ class StateMachineActionServer(Node):
         undock_package = (goal_handle.request.start_dock_id,
                             'undock', float(goal_handle.request.start_dock_id),
                             goal_handle.request.dock_lateral_bias,
-                            goal_handle.request.dock_forward_bias)
+                            goal_handle.request.dock_forward_bias,
+                            goal_handle.request.undock_flag)
         dock_package = (goal_handle.request.end_dock_id,
                             'dock', (-1 * float(goal_handle.request.end_dock_id)),
                             goal_handle.request.dock_lateral_bias,
-                            goal_handle.request.dock_forward_bias)
+                            goal_handle.request.dock_forward_bias,
+                            goal_handle.request.undock_flag)
+        output_feedback_msg = StateMachine.Feedback()
 
         ######### Start with Undocking Phase ###########
-        # self.re_init_goal_states()
-        # self._state = "Undocking"
-        # self._action_done_event.clear()
-        # self.dock_undock_send_goal(undock_package)
-        # # self._action_done_event.wait()
-        # while not self._action_done_event.is_set():
-        #     if not goal_handle.is_active:
-        #         self.get_logger().info('Goal aborted')
-        #         return self.get_final_result(False)
+        self.re_init_goal_states()
+        self._state = "Undocking"
+        self._action_done_event.clear()
+        self.dock_undock_send_goal(undock_package)
 
-        #     # check for aborted or cancelled goal handle
-        #     if goal_handle.is_cancel_requested:
-        #         self._state_machine_goal_handle.canceled()
-        #         self.get_logger().info('Goal canceled')
-        #         return self.get_final_result(True)
+        while not self._action_done_event.is_set():
+            if not goal_handle.is_active:
+                self.get_logger().info('Goal aborted')
+                return self.get_final_result(False)
 
-        #     time.sleep(0.1)
+            # check for aborted or cancelled goal handle
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return self.get_final_result(True)
 
-        # self.get_logger().info('Got result')
-        # if (self._goal_accepted is False) or (self._goal_reached is False):
-        #     goal_handle.abort()
-        #     return self.get_final_result(False)
-        # self.get_logger().info('State Change')
-        # output_feedback_msg.pose_feedback = PoseWithCovarianceStamped()
-        # output_feedback_msg.state_feedback = self._state
-        # goal_handle.publish_feedback(output_feedback_msg)
+            time.sleep(0.1)
+
+        self.get_logger().info('Got result')
+        if (self._goal_accepted is False) or (self._goal_reached is False):
+            goal_handle.abort()
+            return self.get_final_result(False)
+        self.get_logger().info('State Change')
+        output_feedback_msg.pose_feedback = PoseWithCovarianceStamped()
+        output_feedback_msg.state_feedback = self._state
+        goal_handle.publish_feedback(output_feedback_msg)
 
         ######### Navigation Phase ###########
         self.re_init_goal_states()
@@ -311,7 +306,7 @@ class StateMachineActionServer(Node):
 
             # check for aborted or cancelled goal handle
             if goal_handle.is_cancel_requested:
-                self._state_machine_goal_handle.canceled()
+                goal_handle.canceled()
                 self.get_logger().info('Goal canceled')
                 return self.get_final_result(True)
 
@@ -327,29 +322,29 @@ class StateMachineActionServer(Node):
         goal_handle.publish_feedback(output_feedback_msg)
 
         ######### Docking Phase ###########
-        # self.re_init_goal_states()
-        # self._state = "Docking"
-        # self._action_done_event.clear()
-        # self.dock_undock_send_goal(dock_package)
-        # # self._action_done_event.wait()
-        # while not self._action_done_event.is_set():
-        #     if not goal_handle.is_active:
-        #         self.get_logger().info('Goal aborted')
-        #         return self.get_final_result(False)
+        self.re_init_goal_states()
+        self._state = "Docking"
+        self._action_done_event.clear()
+        self.dock_undock_send_goal(dock_package)
 
-        #     # check for aborted or cancelled goal handle
-        #     if goal_handle.is_cancel_requested:
-        #         self._state_machine_goal_handle.canceled()
-        #         self.get_logger().info('Goal canceled')
-        #         return self.get_final_result(False)
+        while not self._action_done_event.is_set():
+            if not goal_handle.is_active:
+                self.get_logger().info('Goal aborted')
+                return self.get_final_result(False)
 
-        #     time.sleep(0.1)
+            # check for aborted or cancelled goal handle
+            if goal_handle.is_cancel_requested:
+                goal_handle.canceled()
+                self.get_logger().info('Goal canceled')
+                return self.get_final_result(True)
 
-        # self.get_logger().info('Got result')
+            time.sleep(0.1)
 
-        # if (self._goal_accepted is False) or (self._goal_reached is False):
-        #     goal_handle.abort()
-        #     return self.get_final_result(False)
+        self.get_logger().info('Got result')
+
+        if (self._goal_accepted is False) or (self._goal_reached is False):
+            goal_handle.abort()
+            return self.get_final_result(False)
 
         self.get_logger().info("Returning State Machine Success")
         goal_handle.succeed()
